@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Customer Notes PDF Export
 Plugin URI:  https://bakry2.vercel.app/
-Description: A plugin to export WooCommerce customer notes as a PDF file.
+Description: A plugin to export WooCommerce customer notes as a text file.
 Version:     1.0
 Author:      Bakry Abdelsalam
 Author URI:  https://bakry2.vercel.app/
