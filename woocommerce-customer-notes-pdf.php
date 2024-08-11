@@ -9,19 +9,12 @@ Author URI:  https://bakry2.vercel.app/
 License:     GPL2
 */
 
-// Prevent direct access to the file
 if (!defined('ABSPATH')) {
     exit;
 }
-
-// Include the Composer autoloader
-require_once plugin_dir_path(__FILE__) . 'dompdf/vendor/autoload.php';
-
-use Dompdf\Dompdf;
-
 // Display the custom note field on the order details page
-add_action('woocommerce_order_details_after_order_table', 'wc_custom_order_note_field');
-function wc_custom_order_note_field($order) {
+add_action('woocommerce_order_details_after_order_table', 'add_custom_order_note_field');
+function add_custom_order_note_field($order) {
     if (in_array($order->get_status(), array('processing', 'new_unpaid_order'))) {
         ?>
         <form action="" method="post">
@@ -39,8 +32,8 @@ function wc_custom_order_note_field($order) {
 }
 
 // Handle the custom order note submission
-add_action('template_redirect', 'wc_handle_custom_order_note_submission');
-function wc_handle_custom_order_note_submission() {
+add_action('template_redirect', 'handle_custom_order_note_submission');
+function handle_custom_order_note_submission() {
     if (isset($_POST['submit_custom_order_note'], $_POST['custom_order_note'], $_POST['order_id']) && is_user_logged_in()) {
         $order_id = intval($_POST['order_id']);
         $order = wc_get_order($order_id);
@@ -70,15 +63,14 @@ function wc_handle_custom_order_note_submission() {
 }
 
 // Add custom column to orders table
-add_filter('manage_edit-shop_order_columns', 'wc_add_custom_order_notes_column');
-function wc_add_custom_order_notes_column($columns) {
+function add_custom_order_notes_column($columns) {
     $columns['order_notes_status'] = 'ملاحظات على الطلب';
     return $columns;
 }
+add_filter('manage_edit-shop_order_columns', 'add_custom_order_notes_column');
 
 // Display the note status in the custom column
-add_action('manage_shop_order_posts_custom_column', 'wc_display_custom_order_notes_column');
-function wc_display_custom_order_notes_column($column) {
+function display_custom_order_notes_column($column) {
     global $post, $the_order;
 
     if ($column == 'order_notes_status') {
@@ -90,14 +82,14 @@ function wc_display_custom_order_notes_column($column) {
         }
     }
 }
+add_action('manage_shop_order_posts_custom_column', 'display_custom_order_notes_column');
 
 // Add mark as read button and export button in the order details page
-add_action('woocommerce_admin_order_data_after_order_details', 'wc_add_mark_note_as_read_button');
-function wc_add_mark_note_as_read_button($order) {
+function add_mark_note_as_read_button($order) {
     $new_note = get_post_meta($order->get_id(), '_new_order_note', true);
 
     if ($new_note == 'yes') {
-        echo '<a href="' . wp_nonce_url(admin_url('admin-post.php?action=wc_mark_note_as_read&order_id=' . $order->get_id()), 'wc_mark_note_as_read') . '" class="button">Mark Note as Read</a>';
+        echo '<a href="' . wp_nonce_url(admin_url('admin-post.php?action=mark_note_as_read&order_id=' . $order->get_id()), 'mark_note_as_read') . '" class="button">Mark Note as Read</a>';
     }
 
     // Get all notes for this order
@@ -110,14 +102,14 @@ function wc_add_mark_note_as_read_button($order) {
 
     // Only show the download button if there are customer notes
     if (!empty($customer_notes)) {
-        echo '<a href="' . wp_nonce_url(admin_url('admin-post.php?action=wc_download_order_notes&order_id=' . $order->get_id()), 'wc_download_order_notes') . '" class="button">Download Notes as PDF</a>';
+        echo '<a href="' . wp_nonce_url(admin_url('admin-post.php?action=download_order_notes&order_id=' . $order->get_id()), 'download_order_notes') . '" class="button">Download Notes as Text</a>';
     }
 }
+add_action('woocommerce_admin_order_data_after_order_details', 'add_mark_note_as_read_button');
 
 // Handle the request to mark the note as read
-add_action('admin_post_wc_mark_note_as_read', 'wc_handle_mark_note_as_read');
-function wc_handle_mark_note_as_read() {
-    if (isset($_GET['order_id']) && check_admin_referer('wc_mark_note_as_read')) {
+function handle_mark_note_as_read() {
+    if (isset($_GET['order_id']) && check_admin_referer('mark_note_as_read')) {
         $order_id = intval($_GET['order_id']);
         update_post_meta($order_id, '_new_order_note', 'no');
 
@@ -127,14 +119,14 @@ function wc_handle_mark_note_as_read() {
         exit;
     }
 }
+add_action('admin_post_mark_note_as_read', 'handle_mark_note_as_read');
 
-// Handle the request to download customer notes as a PDF file
-add_action('admin_post_wc_download_order_notes', 'wc_handle_download_order_notes');
-function wc_handle_download_order_notes() {
-    if (isset($_GET['order_id']) && check_admin_referer('wc_download_order_notes')) {
+// Handle the request to download customer notes as a text file
+function handle_download_order_notes() {
+    if (isset($_GET['order_id']) && check_admin_referer('download_order_notes')) {
         $order_id = intval($_GET['order_id']);
         $order = wc_get_order($order_id);
-
+        
         if ($order) {
             // Get all notes for this order
             $notes = wc_get_order_notes(array('order_id' => $order_id));
@@ -144,31 +136,28 @@ function wc_handle_download_order_notes() {
                 return $note->customer_note == 1; // Only include notes marked as customer notes
             });
 
-            // Create the HTML content for the PDF
-            $html = '<h1>ملاحظات العميل للطلب رقم #' . $order_id . '</h1>';
-            $html .= '<hr>';
+            // Create the text content with UTF-8 encoding to support Arabic
+            $content = "ملاحظات العميل للطلب رقم #" . $order_id . "\n";
+            $content .= "===================================\n\n";
             if (!empty($customer_notes)) {
                 foreach ($customer_notes as $note) {
-                    $html .= '<p><strong>' . $note->date_created->date('Y-m-d H:i:s') . '</strong><br>' . nl2br($note->content) . '</p>';
-                    $html .= '<hr>';
+                    $content .= $note->date_created->date('Y-m-d H:i:s') . " - " . $note->content . "\n";
                 }
             } else {
-                $html .= '<p>لا توجد ملاحظات متاحة لهذا الطلب.</p>';
+                $content .= "لا توجد ملاحظات متاحة لهذا الطلب.\n";
             }
 
-            // Initialize Dompdf
-            $dompdf = new Dompdf();
-            $dompdf->loadHtml($html);
+            // Convert content to UTF-8 to ensure Arabic support
+            $content = mb_convert_encoding($content, 'UTF-8', 'auto');
 
-            // Set paper size and orientation
-            $dompdf->setPaper('A4', 'portrait');
+            // Set headers to force download as a UTF-8 encoded text file
+            header('Content-Type: text/plain; charset=UTF-8');
+            header('Content-Disposition: attachment; filename="customer_notes_' . $order_id . '.txt"');
 
-            // Render the PDF
-            $dompdf->render();
-
-            // Output the generated PDF (force download)
-            $dompdf->stream('customer_notes_' . $order_id . '.pdf', array('Attachment' => true));
+            // Output the content
+            echo $content;
             exit;
         }
     }
 }
+add_action('admin_post_download_order_notes', 'handle_download_order_notes');
